@@ -44,9 +44,12 @@ const walkDir = (opts, browserifyOpts) => {
       }
     }
   }
+  if(!result.indexFiles.length) {
+    log(chalk.red('!!     no files found in', opts.input, 'with page file named', opts.indexName))
+  }
   return result
 }
-
+ 
 const compile = (input, output, opts, browserifyOpts) => {
   browserifyOpts.entries = [input]
   browserifyOpts = R.merge({
