@@ -63,9 +63,11 @@ const compile = (input, output, opts, browserifyOpts) => {
   log(chalk.green.bold('=>     compiled: ' + input + ' to ' + output))
   bundle()
   b.on('update', ()=> {
-    log(`updated ${input}`)
     log(chalk.green.bold('=>     compiled: ' + input + ' to ' + output))
     bundle()
+  })
+  b.on('update', (err)=> {
+    log(chalk.red('!!     err: ' + err))
   })
 }
 
