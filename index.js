@@ -1,3 +1,4 @@
+const exorcist = require('exorcist')
 const zlib = require('zlib')
 const R = require('ramda')
 const fs = require('fs')
@@ -31,7 +32,7 @@ const walkDir = (opts, browserifyOpts) => {
   while(stack.length) {
     var input = stack.pop()
     const stats = fs.lstatSync(input)
-    const output = R.replace(inputRegex, opts.output, input)
+    const filepath = R.replace(inputRegex, '', input)
     if(stats.isDirectory()) {
       // Push all children in the directory to the stack
       const children = R.map(R.concat(input + '/'), fs.readdirSync(input))
@@ -40,9 +41,9 @@ const walkDir = (opts, browserifyOpts) => {
     } else if(stats.isFile()) {
       if(input.match(new RegExp('\/' + opts.indexName + '$'))) {
         log(chalk.gray('<>  found ' + input))
-        createDirs(output)
+        createDirs(opts.output + filepath)
         result.indexFiles.push(input)
-        compile(input, output, opts, browserifyOpts)
+        compile(input, filepath, opts, browserifyOpts)
       }
     }
   }
@@ -51,46 +52,56 @@ const walkDir = (opts, browserifyOpts) => {
   }
   return result
 }
- 
-const compile = (input, output, opts, browserifyOpts) => {
+
+const compile = (input, filepath, opts, browserifyOpts) => {
   browserifyOpts.entries = [input]
   browserifyOpts = R.merge({
     cache: {}
   , packageCache: {}
   , plugin: []
+  , debug: true
   }, browserifyOpts)
   var plugins = [errorify]
   if(opts.watch) plugins.push(watchify)
   browserifyOpts.plugin = browserifyOpts.plugin.concat(plugins)
   const b = browserify(browserifyOpts)
-  bundle(input, output, opts, b)
-  b.on('update', () => bundle(input, output, opts, b))
+  bundle(filepath, opts, b)
+  b.on('update', () => bundle(filepath, opts, b))
 }
 
-const bundle = (input, output, opts, b) => {
-  const bundleStream = fs.createWriteStream(output)
-  b.bundle().pipe(bundleStream)
-  bundleStream.on('finish', postCompile(input, output, opts))
+const bundle = (filepath, opts, b) => {
+  const bundleStream = fs.createWriteStream(opts.output + filepath)
+  const sourceMapUrl = (opts.sourceMapUrl || opts.output) + filepath + '.map'
+  b.bundle()
+    .pipe(exorcist(opts.output + filepath + '.map', sourceMapUrl))
+    .pipe(bundleStream)
+  bundleStream.on('finish', postCompile(filepath, sourceMapUrl, opts))
 }
 
 // Optionally uglify the compiled output, and generate a source map file
-const postCompile = (input, output, opts) => () => {
+const postCompile = (filepath, sourceMapUrl, opts) => () => {
+  const fullPath = opts.output + filepath
   if(opts.uglify) {
-    log(chalk.blue('<>  uglifying ' + output))
-    fs.renameSync(output,  output + '.bundle')
-    var result = Uglify.minify(output + '.bundle', { outSourceMap: output + '.map' })
-    fs.writeFile(output, result.code, R.identity)
-    fs.unlink(output + '.bundle', R.identity)
+    log(chalk.blue('<>  uglifying ' + opts.output + filepath))
+    const mapPath = fullPath + '.map'
+    fs.renameSync(fullPath, fullPath + '.bundle')
+    var result = Uglify.minify(fullPath + '.bundle', {
+      inSourceMap: mapPath
+    , outSourceMap: mapPath
+    , sourceMapUrl: sourceMapUrl
+    })
+    fs.writeFile(fullPath, result.code, R.identity)
+    fs.unlink(fullPath + '.bundle', R.identity)
   }
   if(opts.gzip) {
     // gzip it!
     const gzip = zlib.createGzip()
-    log(chalk.blue('<>  gzipping ' + output + '.gz'))
-    fs.createReadStream(output)
+    log(chalk.blue('<>  gzipping ' + fullPath + '.gz'))
+    fs.createReadStream(fullPath)
       .pipe(gzip)
-      .pipe(fs.createWriteStream(output + '.gz'))
+      .pipe(fs.createWriteStream(fullPath + '.gz'))
   }
-  log(chalk.green.bold('=>  compiled ' + input + ' to ' + output))
+  log(chalk.green.bold('=>  compiled ' + fullPath))
 }
 
 // Create the full directory tree for a file path

@@ -1,30 +1,46 @@
 # browserify-crawl
 
-Recursively crawl through all your JS directories, finding all the main files, and compiling them and outputting them into another directory, preserving the original directory structure. Useful for multi-page apps with different main javascript files to load per-page. Uses watchify and errorify built-in.
+This library is our "ideal build script" wrapped up into a module. It supports all of the following:
+* Crawls a tree of directories, finds all your main-files
+* Bundles them with Browserify using any transforms/plugins (uses errorify)
+* Creates an external source map with exorcist
+* Can optionally uglify the result (+ sourcemap)
+* Can optionally gzip the result 
+* Can optionally use watchify to hang and watch for changes on any file
 
-PostCSS analog is: [postcss-crawl](https://github.com/jayrbolton/postcss-crawl).
+There is a PostCSS analog here: [postcss-crawl](https://github.com/jayrbolton/postcss-crawl).
+
+## crawl(options, browserifyOptions)
+
+The `options` object can have these properties:
+
+* `input`: path of the input directory containing all your mainfiles (which may be in nested directories). Required.
+* `output`: path of your output directory, typically `public/js`, `dist`, etc. Required.
+* `indexName`: name of the main-file(s) that you want to get bundle. Defaults to `page.js`
+* `log`: Boolean whether to print log messages. Defaults to `true`
+* `watch`: Boolean whether to use watchify and watch for changes to files. Defaults to `false`
+* `sourceMapUrl`: Url prefix that will be used to access sourcemaps. Defaults to the output path
+* `uglify`: Whether to uglify your code after browserifying it. Defaults to `false`
+* `gzip`: Whether to gzip your code (will save to `output/filename.js.gz`). Defaults to `false`.
+
+The second parameter, `browserifyOptions`, takes the options from the [browserify api](https://github.com/substack/node-browserify), such as `transform`.
 
 ```js
 const crawl = require('browserify-crawl')
 
 const browserifyOptions = {
-  transform: ['babelify']
+  transform: 'es2040'
 }
 
 const crawlOptions = {
   input: 'source/js'
 , output: 'dist/js'
+, gzip: true
+, uglify: true
+, watch: false
+, sourceMapUrl: '/js'
 }
 
 crawl(crawlOptions, browserifyOptions)
 ```
 
-Browserify option are the same as those found in the [browserify api docs](https://github.com/substack/node-browserify)
-
-Crawl options (the first set of options), can include:
-
-* `log`: Boolean - whether to print info about the build process **(defaults to true)**
-* `watch`: Boolean - whether to watch for file changes and continuously compile files, or to build one-time and exit **(defaults to true)**
-* `input`: String - directory path of the source javascript files you want to compile **(required)**
-* `output`: String - directory path that you want to put built output files into **(required)**
-* `mainFile`: String - filename you want to use for the page/index/parent/main files **(defaults to 'page.js')**
