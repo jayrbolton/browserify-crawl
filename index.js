@@ -1,13 +1,15 @@
+const zlib = require('zlib')
 const R = require('ramda')
 const fs = require('fs')
 const browserify = require('browserify')
 const chalk = require('chalk')
 const watchify = require('watchify')
 const errorify = require('errorify')
+const Uglify = require('uglify-js')
 
-let log = ()=>{}
+var log = R.identity
 
-function init(opts, browserifyOpts) {
+const init = (opts, browserifyOpts) => {
   opts = R.merge({
     indexName: 'page.js'
   , input: ''
@@ -37,7 +39,7 @@ const walkDir = (opts, browserifyOpts) => {
       result.directories.push(input)
     } else if(stats.isFile()) {
       if(input.match(new RegExp('\/' + opts.indexName + '$'))) {
-        log(chalk.gray('<>     watching: ' + input))
+        log(chalk.gray('<>  found ' + input))
         createDirs(output)
         result.indexFiles.push(input)
         compile(input, output, opts, browserifyOpts)
@@ -45,7 +47,7 @@ const walkDir = (opts, browserifyOpts) => {
     }
   }
   if(!result.indexFiles.length) {
-    log(chalk.red('!!     no files found in', opts.input, 'with page file named', opts.indexName))
+    log(chalk.red('!!  no files in', opts.input, 'with main file ', opts.indexName))
   }
   return result
 }
@@ -57,24 +59,38 @@ const compile = (input, output, opts, browserifyOpts) => {
   , packageCache: {}
   , plugin: []
   }, browserifyOpts)
-  browserifyOpts.plugin = browserifyOpts.plugin.concat([watchify, errorify])
+  var plugins = [errorify]
+  if(opts.watch) plugins.push(watchify)
+  browserifyOpts.plugin = browserifyOpts.plugin.concat(plugins)
   const b = browserify(browserifyOpts)
-  const bundle = () => b.bundle().pipe(fs.createWriteStream(output))
-  log(chalk.green.bold('=>     compiled: ' + input + ' to ' + output))
-  bundle()
-  b.on('update', ()=> {
-    log(chalk.green.bold('=>     compiled: ' + input + ' to ' + output))
-    bundle()
-  })
+  bundle(input, output, opts, b)
+  b.on('update', bundle)
 }
 
-const fileExists = path => {
-  try {
-    fs.accessSync(path)
-    return true
-  } catch(e) {
-    return false
+const bundle = (input, output, opts, b) => {
+  const bundleStream = fs.createWriteStream(output)
+  b.bundle().pipe(bundleStream)
+  bundleStream.on('finish', postCompile(input, output, opts))
+}
+
+// Optionally uglify the compiled output, and generate a source map file
+const postCompile = (input, output, opts) => () => {
+  if(opts.uglify) {
+    log(chalk.blue('<>  uglifying ' + output))
+    fs.renameSync(output,  output + '.bundle')
+    var result = Uglify.minify(output + '.bundle', { outSourceMap: output + '.map' })
+    fs.writeFile(output, result.code, R.identity)
+    fs.unlink(output + '.bundle', R.identity)
   }
+  if(opts.gzip) {
+    // gzip it!
+    const gzip = zlib.createGzip()
+    log(chalk.blue('<>  gzipping ' + output + '.gz'))
+    fs.createReadStream(output)
+      .pipe(gzip)
+      .pipe(fs.createWriteStream(output + '.gz'))
+  }
+  log(chalk.green.bold('=>  compiled ' + input + ' to ' + output))
 }
 
 // Create the full directory tree for a file path
@@ -88,8 +104,5 @@ const createDirs =
   , R.scan((arr, p) => R.append(p, arr), []) // an array of arrays of directory levels [[], ['css'], ['css', 'nonprofits'], ['css', 'nonprofits', 'recurring_donations.css']]
   , R.split('/')
   )
-
-const logCompileErr = err =>
-  process.stderr.write(chalk.red('!!        error: ' + err.message + '\n'))
 
 module.exports = init

@@ -8,6 +8,7 @@ const browserifyOpts = {
 const crawlOpts = {
   input: 'test/input'
 , output: 'test/output'
+, uglify: true
 }
 
 crawl(crawlOpts, browserifyOpts)
