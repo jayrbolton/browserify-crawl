@@ -64,7 +64,7 @@ const compile = (input, output, opts, browserifyOpts) => {
   browserifyOpts.plugin = browserifyOpts.plugin.concat(plugins)
   const b = browserify(browserifyOpts)
   bundle(input, output, opts, b)
-  b.on('update', bundle)
+  b.on('update', () => bundle(input, output, opts, b))
 }
 
 const bundle = (input, output, opts, b) => {
