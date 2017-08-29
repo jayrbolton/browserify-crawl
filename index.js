@@ -63,7 +63,6 @@ function compile (inputPath, opts, callback) {
         callback()
         return
       }
-      console.log('compressing')
       fs.readFile(outputPath, 'utf8', (err, contents) => {
         if (err) throw err
         fs.readFile(outputPath + '.map', 'utf8', (err, map) => {
