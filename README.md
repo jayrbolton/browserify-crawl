@@ -47,6 +47,8 @@ bcrawl({
     transform: 'es2040',
     insertGlobals: true
   }
+}, () => {
+  console.log(' --- Finished initial build, now waiting for changes ---')
 })
 ```
 

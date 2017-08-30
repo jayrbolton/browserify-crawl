@@ -11,4 +11,6 @@ const opts = {
   }
 }
 
-bcrawl(opts, function() {})
+bcrawl(opts, function() {
+  console.log('--- Finished initial build, now waiting for changes ---')
+})
