@@ -7,6 +7,8 @@ const errorify = require('errorify')
 const exorcist = require('exorcist')
 const zlib = require('zlib')
 const UglifyJS = require('uglify-js')
+const waterfall = require('run-waterfall')
+const parallel = require('run-parallel')
 
 module.exports = function init (opts, callback) {
   opts = configDefaults(opts)
@@ -14,14 +16,10 @@ module.exports = function init (opts, callback) {
   const pattern = opts.source + '/**/' + opts.fileName
   glob(pattern, {}, function (err, files) {
     if (err) throw err
-    var count = 0
-    files.forEach(f => {
-      compile(f, opts, (path) => {
-        count += 1
-        if (count === files.length) {
-          callback(files)
-        }
-      })
+    const tasks = files.map(f => cb => compile(f, opts, cb))
+    waterfall(tasks, (err) => {
+      if (err) throw err
+      callback()
     })
   })
 }
@@ -45,6 +43,8 @@ function configDefaults (opts) {
   if (opts.watch) {
     opts.browserify.plugin.push(watchify)
     logTime('👀 watching for changes 👀')
+  } else {
+    logTime('⚡ starting build ⚡')
   }
   return opts
 }
@@ -52,55 +52,65 @@ function configDefaults (opts) {
 function compile (inputPath, opts, callback) {
   const outputPath = path.join(opts.dest, path.relative(opts.source, inputPath))
   const b = browserify(Object.assign({entries: inputPath}, opts.browserify))
-  const bundle = () => {
-    const write = fs.createWriteStream(outputPath)
-    b.bundle()
-      .pipe(exorcist(outputPath + '.map'))
-      .pipe(write)
-    write.on('finish', () => {
-      if (!opts.compress) {
-        logTime('compiled ' + outputPath)
-        callback()
-        return
-      }
-      fs.readFile(outputPath, 'utf8', (err, contents) => {
-        if (err) throw err
-        fs.readFile(outputPath + '.map', 'utf8', (err, map) => {
-          if (err) throw err
-          const basename = path.basename(outputPath)
-          const result = UglifyJS.minify(contents, {
-            sourceMap: {
-              content: map,
-              filename: basename,
-              url: basename + '.map'
-            }
-          })
-          fs.writeFile(outputPath, result.code, (err) => {
-            if (err) throw err
-            gzipIt()
-          })
-          fs.writeFile(outputPath + '.map', result.map, (err) => { if (err) throw err })
-        })
-      })
-    })
-    const gzipIt = () => {
-      const write = fs.createWriteStream(outputPath + '.gz')
-      fs.createReadStream(outputPath)
-        .pipe(zlib.createGzip())
-        .pipe(write)
-      write.on('finish', () => {
-        logTime('compiled ' + outputPath)
-        callback()
-      })
-    }
-  }
   fs.ensureDir(path.dirname(outputPath), function (err) {
     if (err) throw err
-    bundle()
-    if (opts.watch) {
-      b.on('update', bundle)
+    build()
+    if (opts.watch) b.on('update', build)
+  })
+
+  function build () {
+    const write = fs.createWriteStream(outputPath)
+    const smap = exorcist(outputPath + '.map')
+    const done = () => {
+      logTime('compiled ' + outputPath)
+      callback()
+    }
+    waterfall([
+      // Bundle and initial source-map
+      (cb) => {
+        b.bundle().pipe(smap).pipe(write)
+        write.on('finish', cb)
+      },
+      // Continue only if compress === true
+      (cb) => {
+        if (opts.compress) cb(null) // continue
+        else done()
+      },
+      // UglifyJS
+      (cb) => {
+        parallel([
+          cb => fs.readFile(outputPath, 'utf8', cb),
+          cb => fs.readFile(outputPath + '.map', 'utf8', cb)
+        ], (err, results) => cb(err, results[0], results[1]))
+      },
+      (code, map, cb) => uglify(outputPath, code, map, cb),
+      // Gzip it
+      (cb) => gzip(outputPath, cb)
+    ], done)
+  }
+}
+
+function gzip (output, callback) {
+  const write = fs.createWriteStream(output + '.gz')
+  fs.createReadStream(output)
+    .pipe(zlib.createGzip())
+    .pipe(write)
+  write.on('finish', callback)
+}
+
+function uglify (output, code, map, callback) {
+  const base = path.basename(output)
+  const result = UglifyJS.minify(code, {
+    sourceMap: {
+      content: map,
+      filename: base,
+      url: base + '.map'
     }
   })
+  parallel([
+    cb => fs.writeFile(output + '.map', result.map, cb),
+    cb => fs.writeFile(output, result.code, cb)
+  ], err => callback(err))
 }
 
 const logTime = x => console.log(`[${new Date().toLocaleTimeString()}]`, x)
