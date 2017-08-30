@@ -6,7 +6,7 @@ There is a PostCSS analog here: [postcss-crawl](https://github.com/jayrbolton/po
 
 ```js
 const bcrawl = require('browserify-crawl')
-bcrawl({
+const emitter = bcrawl({
    fileName: 'page.js',
    source: 'client/js',
    dest: 'public/js',
@@ -15,10 +15,17 @@ bcrawl({
    browserify: {
      transforms: ['babelify']
    }
-}, callback)
+})
+
+console.log('finding files')
+emitter.on('build', (files) => console.log('finished initial build of', files.length, 'files'))
+emitter.on('compile', (file) => console.log('compiled', file))
+emitter.on('gzip', (file) => console.log('gzipped', file))
+emitter.on('minify', (file) => console.log('minified', file))
+emitter.on('update', (file) => console.log('detected update on', file))
 ```
 
-## bcrawl(options, callback)
+## bcrawl(options)
 
 The `options` object can have these properties:
 
@@ -29,14 +36,23 @@ The `options` object can have these properties:
 * `watch`: whether to run watchify on each file to recompile on any changes
 * `compress`: whether to uglify & gzip the compiled file (slower)
 
-The callback recieves arguments for `(b, path)`, where `b` is the browserify instance for the file, and `path` is the file's full path. The callback gets called for **every** file, every time the file is finished all of its compiling.
+The return value is an [event emitter](https://nodejs.org/api/events.html) that allows you to listen to the following events:
+
+* `compile`: a file has finished compling. Callback receives the full file path.
+* `build`: the full set of files have finished the initial build. Callback receives an array of all file paths
+* `update`: a file has been updated but not yet compiled
+* `minify`: a file has finished being minified
+* `gzip`: a file has finished being gzipped
+
 
 ## Sample development watcher
 
 ```js
 const bcrawl = require('browserify-crawl')
 
-bcrawl({
+const logTime = x => console.log(`[${new Date().toLocaleTimeString()}]`, x)
+
+const emitter = bcrawl({
   fileName: 'page.js',
   source: './client/js',
   dest: './public/client/js',
@@ -45,11 +61,13 @@ bcrawl({
   browserify: {
     paths: ['client'],
     transform: 'es2040',
-    insertGlobals: true
+    insertGlobals: true // minor speed-up
   }
-}, () => {
-  console.log(' --- Finished initial build, now waiting for changes ---')
 })
+
+logTime('( ﾟヮﾟ) compiling all files')
+emitter.on('build', (files) => logTime('(° ͜ʖ °) finished building ' + files.length + ' files... now watching for changes'))
+emitter.on('compile', (file) => logTime('compiled ' + file))
 ```
 
 ## Sample production builder
@@ -57,7 +75,9 @@ bcrawl({
 ```js
 const bcrawl = require('browserify-crawl')
 
-bcrawl({
+const logTime = x => console.log(`[${new Date().toLocaleTimeString()}]`, x)
+
+const emitter = bcrawl({
   fileName: 'page.js',
   source: './client/js',
   dest: './public/client/js',
@@ -67,7 +87,9 @@ bcrawl({
     transform: 'es2040',
     paths: ['client']
   }
-}, () => {
-  console.log(' --- Done building --- ')
 })
+
+logTime('( ﾟヮﾟ) compiling all files')
+emitter.on('build', (files) => logTime('(° ͜ʖ °) finished building ' + files.length + ' files'))
+emitter.on('compile', (file) => logTime('compiled ' + file))
 ```

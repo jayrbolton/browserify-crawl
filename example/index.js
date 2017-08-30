@@ -1,6 +1,6 @@
 const bcrawl = require('../')
 
-const opts = {
+const emitter = bcrawl({
   source: 'example/input',
   dest: 'example/output',
   fileName: 'page.js',
@@ -9,8 +9,11 @@ const opts = {
   browserify: {
     transform: ['babelify']
   }
-}
-
-bcrawl(opts, function() {
-  console.log('--- Finished initial build, now waiting for changes ---')
 })
+
+console.log('finding files')
+emitter.on('build', (files) => console.log('finished initial build of', files.length, 'files'))
+emitter.on('compile', (file) => console.log('compiled', file))
+emitter.on('gzip', (file) => console.log('gzipped', file))
+emitter.on('minify', (file) => console.log('minified', file))
+emitter.on('update', (file) => console.log('detected update on', file))

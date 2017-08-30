@@ -23,7 +23,17 @@ tape('it compiles mainfiles', (t) => {
     (cb)    => fs.writeFile('./test/input/x.js', x, cb),
     (cb)    => fs.writeFile('./test/input/nested/main.js', nested, cb),
     (cb)    => {
-      bcrawl({fileName: 'main.js', source: './test/input', dest: './test/output', compress: true}, (files) => {
+      const emitter = bcrawl({
+        fileName: 'main.js',
+        source: './test/input',
+        dest: './test/output',
+        compress: true
+      })
+      emitter.on('compile', (file) => console.log('compiled', file))
+      emitter.on('gzip', (file) => console.log('gzipped', file))
+      emitter.on('minify', (file) => console.log('minified', file))
+      emitter.on('build', (files) => {
+        console.log('built', files.length, 'files')
         cb(null)
       })
     },

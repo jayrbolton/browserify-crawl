@@ -9,19 +9,24 @@ const zlib = require('zlib')
 const UglifyJS = require('uglify-js')
 const waterfall = require('run-waterfall')
 const parallel = require('run-parallel')
+const EventEmitter = require('events')
 
-module.exports = function init (opts, callback) {
+module.exports = function init (opts) {
   opts = configDefaults(opts)
-  callback = callback || function () {}
   const pattern = opts.source + '/**/' + opts.fileName
   glob(pattern, {}, function (err, files) {
     if (err) throw err
     const tasks = files.map(f => cb => compile(f, opts, cb))
+    let initial = true
     waterfall(tasks, (err) => {
       if (err) throw err
-      callback()
+      if (initial) {
+        opts.emitter.emit('build', files)
+        initial = false
+      }
     })
   })
+  return opts.emitter
 }
 
 // Set various defaults into the user-supplied configuration object
@@ -31,6 +36,7 @@ function configDefaults (opts) {
       throw new TypeError('You must provide a ' + prop + ' property in options')
     }
   })
+  opts.emitter = new EventEmitter()
   opts.browserify = opts.browserify || {}
   opts.source = path.resolve(opts.source)
   opts.dest = path.resolve(opts.dest)
@@ -42,9 +48,6 @@ function configDefaults (opts) {
   opts.browserify.plugin.push(errorify)
   if (opts.watch) {
     opts.browserify.plugin.push(watchify)
-    logTime('👀 watching for changes 👀')
-  } else {
-    logTime('⚡ starting build ⚡')
   }
   return opts
 }
@@ -55,14 +58,19 @@ function compile (inputPath, opts, callback) {
   fs.ensureDir(path.dirname(outputPath), function (err) {
     if (err) throw err
     build()
-    if (opts.watch) b.on('update', build)
+    if (opts.watch) {
+      b.on('update', () => {
+        opts.emitter.emit('update', inputPath)
+        build()
+      })
+    }
   })
 
   function build () {
     const write = fs.createWriteStream(outputPath)
     const smap = exorcist(outputPath + '.map')
     const done = () => {
-      logTime('compiled ' + outputPath)
+      opts.emitter.emit('compile', outputPath)
       callback()
     }
     waterfall([
@@ -83,22 +91,28 @@ function compile (inputPath, opts, callback) {
           cb => fs.readFile(outputPath + '.map', 'utf8', cb)
         ], (err, results) => cb(err, results[0], results[1]))
       },
-      (code, map, cb) => uglify(outputPath, code, map, cb),
+      (code, map, cb) => uglify(opts, outputPath, code, map, cb),
       // Gzip it
-      (cb) => gzip(outputPath, cb)
-    ], done)
+      (cb) => gzip(opts, outputPath, cb)
+    ], (err) => {
+      if (err) throw err
+      done()
+    })
   }
 }
 
-function gzip (output, callback) {
+function gzip (opts, output, callback) {
   const write = fs.createWriteStream(output + '.gz')
   fs.createReadStream(output)
     .pipe(zlib.createGzip())
     .pipe(write)
-  write.on('finish', callback)
+  write.on('finish', (err) => {
+    opts.emitter.emit('gzip', output)
+    callback(err)
+  })
 }
 
-function uglify (output, code, map, callback) {
+function uglify (opts, output, code, map, callback) {
   const base = path.basename(output)
   const result = UglifyJS.minify(code, {
     sourceMap: {
@@ -110,7 +124,8 @@ function uglify (output, code, map, callback) {
   parallel([
     cb => fs.writeFile(output + '.map', result.map, cb),
     cb => fs.writeFile(output, result.code, cb)
-  ], err => callback(err))
+  ], err => {
+    opts.emitter.emit('minify', output)
+    callback(err)
+  })
 }
-
-const logTime = x => console.log(`[${new Date().toLocaleTimeString()}]`, x)
