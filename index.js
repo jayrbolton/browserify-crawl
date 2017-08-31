@@ -43,6 +43,8 @@ function configDefaults (opts) {
   opts.browserify = Object.assign({
     plugin: [],
     transform: [],
+    cache: {},
+    packageCache: {},
     debug: true
   }, opts.browserify)
   opts.browserify.plugin.push(errorify)
@@ -54,7 +56,14 @@ function configDefaults (opts) {
 
 function compile (inputPath, opts, callback) {
   const outputPath = path.join(opts.dest, path.relative(opts.source, inputPath))
-  const b = browserify(Object.assign({entries: inputPath}, opts.browserify))
+  const b = browserify(opts.browserify)
+  b.add(inputPath)
+  if (opts.watch) {
+    b.on('update', () => {
+      opts.emitter.emit('update', inputPath)
+      build()
+    })
+  }
   fs.ensureDir(path.dirname(outputPath), function (err) {
     if (err) throw err
     build()
@@ -67,7 +76,7 @@ function compile (inputPath, opts, callback) {
   })
 
   function build () {
-    const write = fs.createWriteStream(outputPath)
+    const write = fs.createWriteStream(outputPath, 'utf8')
     const smap = exorcist(outputPath + '.map')
     const done = () => {
       opts.emitter.emit('compile', outputPath)
