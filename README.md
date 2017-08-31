@@ -1,8 +1,6 @@
 # browserify-crawl
 
-Recursively crawls a directory and browserifies, watches, source-maps, displays errors, minifies, and gzips multiple files based on filename matching. This is a utility for developer convenience that is still very customizable.
-
-There is a PostCSS analog here: [postcss-walk](https://github.com/jayrbolton/postcss-walk).
+Recursively crawls a directory and browserifies, watches, source-maps, displays errors, minifies, and gzips multiple files based on filename matching. This is a pre-configured utility for developer convenience that is still very customizable.
 
 ```js
 const bcrawl = require('browserify-crawl')
