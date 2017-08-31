@@ -1,6 +1,6 @@
 # browserify-crawl
 
-Recursively crawls a directory and browserifies multiple files based on filename matching. This is a command-line app for developer convenience, with builtin support for watchify-ing, showing errors, source mapping, and gzipping. It prints out a console log as it goes. It's useful for web apps where you want to browserify many js files at once, watch for any changes, and get some convenient defaults.
+Recursively crawls a directory and browserifies, watches, source-maps, displays errors, minifies, and gzips multiple files based on filename matching. This is a utility for developer convenience that is still very customizable.
 
 There is a PostCSS analog here: [postcss-walk](https://github.com/jayrbolton/postcss-walk).
 
