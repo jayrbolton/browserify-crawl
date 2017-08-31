@@ -25,6 +25,10 @@ emitter.on('minify', (file) => console.log('minified', file))
 emitter.on('update', (file) => console.log('detected update on', file))
 ```
 
+The above will find **all** files named `page.js` in the `client/js` directory, even nested ones. It will then recreate a mirror directory structure in `public/js` with all the compiled files.
+
+For example, if you have `client/js/page.js` and `client/js/dashboard/page.js`, then the compiler will create `public/js/page.js` and `public/js/dashboard/page.js`, which will be the built versions of the files. The compiler will also create `public/js/page.js.map`, `public/js/page.js.gz`, `public/js/dashboard/page.js.map`, and `public/js/dashboard/page.js.gz`.
+
 ## bcrawl(options)
 
 The `options` object can have these properties:
