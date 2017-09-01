@@ -56,58 +56,51 @@ function configDefaults (opts) {
 
 function compile (inputPath, opts, callback) {
   const outputPath = path.join(opts.dest, path.relative(opts.source, inputPath))
-  const b = browserify(opts.browserify)
-  b.add(inputPath)
+  const b = browserify(inputPath, opts.browserify)
+  const done = () => {
+    opts.emitter.emit('compile', outputPath)
+    callback()
+  }
   if (opts.watch) {
     b.on('update', () => {
       opts.emitter.emit('update', inputPath)
-      build()
+      build(b, opts, outputPath, done)
     })
   }
   fs.ensureDir(path.dirname(outputPath), function (err) {
     if (err) throw err
-    build()
-    if (opts.watch) {
-      b.on('update', () => {
-        opts.emitter.emit('update', inputPath)
-        build()
-      })
-    }
+    build(b, opts, outputPath, done)
   })
+}
 
-  function build () {
-    const write = fs.createWriteStream(outputPath, 'utf8')
-    const smap = exorcist(outputPath + '.map')
-    const done = () => {
-      opts.emitter.emit('compile', outputPath)
-      callback()
-    }
-    waterfall([
-      // Bundle and initial source-map
-      (cb) => {
-        b.bundle().pipe(smap).pipe(write)
-        write.on('finish', cb)
-      },
-      // Continue only if compress === true
-      (cb) => {
-        if (opts.compress) cb(null) // continue
-        else done()
-      },
-      // UglifyJS
-      (cb) => {
-        parallel([
-          cb => fs.readFile(outputPath, 'utf8', cb),
-          cb => fs.readFile(outputPath + '.map', 'utf8', cb)
-        ], (err, results) => cb(err, results[0], results[1]))
-      },
-      (code, map, cb) => uglify(opts, outputPath, code, map, cb),
-      // Gzip it
-      (cb) => gzip(opts, outputPath, cb)
-    ], (err) => {
-      if (err) throw err
-      done()
-    })
-  }
+function build (b, opts, output, done) {
+  const write = fs.createWriteStream(output, 'utf8')
+  const smap = exorcist(output + '.map')
+  waterfall([
+    // Bundle and initial source-map
+    (cb) => {
+      b.bundle().pipe(smap).pipe(write)
+      write.on('finish', cb)
+    },
+    // Continue only if compress === true
+    (cb) => {
+      if (opts.compress) cb(null) // continue
+      else done()
+    },
+    // UglifyJS
+    (cb) => {
+      parallel([
+        cb => fs.readFile(output, 'utf8', cb),
+        cb => fs.readFile(output + '.map', 'utf8', cb)
+      ], (err, results) => cb(err, results[0], results[1]))
+    },
+    (code, map, cb) => uglify(opts, output, code, map, cb),
+    // Gzip it
+    (cb) => gzip(opts, output, cb)
+  ], (err) => {
+    if (err) throw err
+    done()
+  })
 }
 
 function gzip (opts, output, callback) {
