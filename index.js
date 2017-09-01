@@ -10,19 +10,27 @@ const UglifyJS = require('uglify-js')
 const waterfall = require('run-waterfall')
 const parallel = require('run-parallel')
 const EventEmitter = require('events')
+const jobQueue = require('queue')
+// const os = require('os')
 
 module.exports = function init (opts) {
   opts = configDefaults(opts)
   const pattern = opts.source + '/**/' + opts.fileName
+  // It seems that adding any concurrency actually makes the compilation much slower on any machine I've tested..
+  const queue = jobQueue({concurrency: 1 /*os.cpus().length*/, autostart: true})
+  queue.start(err => { if (err) throw err })
+  queue.on('error', (err) => {
+    opts.emitter.emit('error', err)
+  })
   glob(pattern, {}, function (err, files) {
     if (err) throw err
-    const tasks = files.map(f => cb => compile(f, opts, cb))
-    let initial = true
-    waterfall(tasks, (err) => {
-      if (err) throw err
-      if (initial) {
+    files.forEach(f => compile(f, opts, queue))
+    let compileCount = 0
+    queue.on('success', (result) => {
+      compileCount += 1
+      opts.emitter.emit('compile', result)
+      if (compileCount === files.length) {
         opts.emitter.emit('build', files)
-        initial = false
       }
     })
   })
@@ -37,43 +45,45 @@ function configDefaults (opts) {
     }
   })
   opts.emitter = new EventEmitter()
-  opts.browserify = opts.browserify || {}
   opts.source = path.resolve(opts.source)
   opts.dest = path.resolve(opts.dest)
   opts.browserify = Object.assign({
-    plugin: [],
-    transform: [],
-    cache: {},
-    packageCache: {},
-    debug: true
-  }, opts.browserify)
+    debug: true,
+    plugin: []
+  }, opts.browserify || {})
   opts.browserify.plugin.push(errorify)
-  if (opts.watch) {
-    opts.browserify.plugin.push(watchify)
-  }
   return opts
 }
 
-function compile (inputPath, opts, callback) {
-  const outputPath = path.join(opts.dest, path.relative(opts.source, inputPath))
-  const b = browserify(inputPath, opts.browserify)
-  const done = () => {
-    opts.emitter.emit('compile', outputPath)
-    callback()
-  }
-  if (opts.watch) {
-    b.on('update', () => {
-      opts.emitter.emit('update', inputPath)
-      build(b, opts, outputPath, done)
-    })
-  }
-  fs.ensureDir(path.dirname(outputPath), function (err) {
-    if (err) throw err
-    build(b, opts, outputPath, done)
-  })
+// Instantiate a new browserify config object
+// .cache and .packageCache must be a new object for every browserify instance
+function browserifyDefaults (opts, path) {
+  const bopts = Object.assign({
+    cache: {},
+    packageCache: {}
+  }, opts.browserify || {})
+  return opts
 }
 
-function build (b, opts, output, done) {
+function compile (inputPath, opts, queue) {
+  const outputPath = path.join(opts.dest, path.relative(opts.source, inputPath))
+  const bopts = browserifyDefaults(opts, inputPath)
+  const b = browserify(inputPath, browserifyDefaults(opts.browserify, inputPath))
+  if (opts.watch) b.plugin(watchify)
+  fs.ensureDir(path.dirname(outputPath), function (err) {
+    if (err) throw err
+    queue.push((cb) => build(b, opts, outputPath, cb))
+  })
+  if (opts.watch) {
+    b.on('update', (cb) => {
+      queue.push((cb) => build(b, opts, outputPath, cb))
+      opts.emitter.emit('update', inputPath)
+    })
+  }
+  return b
+}
+
+function build (b, opts, output, callback) {
   const write = fs.createWriteStream(output, 'utf8')
   const smap = exorcist(output + '.map')
   waterfall([
@@ -82,25 +92,22 @@ function build (b, opts, output, done) {
       b.bundle().pipe(smap).pipe(write)
       write.on('finish', cb)
     },
-    // Continue only if compress === true
-    (cb) => {
-      if (opts.compress) cb(null) // continue
-      else done()
-    },
     // UglifyJS
     (cb) => {
+      if (!opts.compress) return callback(null, output)
       parallel([
         cb => fs.readFile(output, 'utf8', cb),
         cb => fs.readFile(output + '.map', 'utf8', cb)
       ], (err, results) => cb(err, results[0], results[1]))
     },
-    (code, map, cb) => uglify(opts, output, code, map, cb),
+    (code, map, cb) => {
+      uglify(opts, output, code, map, cb)
+    },
     // Gzip it
-    (cb) => gzip(opts, output, cb)
-  ], (err) => {
-    if (err) throw err
-    done()
-  })
+    (cb) => {
+      gzip(opts, output, cb)
+    }
+  ], () => callback(err, output))
 }
 
 function gzip (opts, output, callback) {
