@@ -11,13 +11,11 @@ const waterfall = require('run-waterfall')
 const parallel = require('run-parallel')
 const EventEmitter = require('events')
 const jobQueue = require('queue')
-// const os = require('os')
 
 module.exports = function init (opts) {
   opts = configDefaults(opts)
   const pattern = opts.source + '/**/' + opts.fileName
-  // It seems that adding any concurrency actually makes the compilation much slower on any machine I've tested..
-  const queue = jobQueue({concurrency: 1 /*os.cpus().length*/, autostart: true})
+  const queue = jobQueue({concurrency: opts.concurrency || 1, autostart: true})
   queue.start(err => { if (err) throw err })
   queue.on('error', (err) => {
     opts.emitter.emit('error', err)
@@ -57,18 +55,16 @@ function configDefaults (opts) {
 
 // Instantiate a new browserify config object
 // .cache and .packageCache must be a new object for every browserify instance
-function browserifyDefaults (opts, path) {
-  const bopts = Object.assign({
+function browserifyDefaults (bopts) {
+  return Object.assign({
     cache: {},
     packageCache: {}
-  }, opts.browserify || {})
-  return opts
+  }, bopts)
 }
 
 function compile (inputPath, opts, queue) {
   const outputPath = path.join(opts.dest, path.relative(opts.source, inputPath))
-  const bopts = browserifyDefaults(opts, inputPath)
-  const b = browserify(inputPath, browserifyDefaults(opts.browserify, inputPath))
+  const b = browserify(inputPath, browserifyDefaults(opts.browserify))
   if (opts.watch) b.plugin(watchify)
   fs.ensureDir(path.dirname(outputPath), function (err) {
     if (err) throw err
@@ -107,7 +103,7 @@ function build (b, opts, output, callback) {
     (cb) => {
       gzip(opts, output, cb)
     }
-  ], () => callback(err, output))
+  ], (err) => callback(err, output))
 }
 
 function gzip (opts, output, callback) {
