@@ -17,10 +17,10 @@ const emitter = bcrawl({
 
 console.log('finding files')
 emitter.on('build', (files) => console.log('finished initial build of', files.length, 'files'))
-emitter.on('compile', (file) => console.log('compiled', file))
-emitter.on('gzip', (file) => console.log('gzipped', file))
-emitter.on('minify', (file) => console.log('minified', file))
 emitter.on('update', (file) => console.log('detected update on', file))
+emitter.on('compile', (file) => console.log('compiled', file))
+emitter.on('compress', (file) => console.log('compressed', file))
+emitter.on('error', (err) => console.log('error', err.message))
 ```
 
 The above will find **all** files named `page.js` in the `client/js` directory, even nested ones. It will then recreate a mirror directory structure in `public/js` with all the compiled files.
@@ -43,8 +43,8 @@ The return value is an [event emitter](https://nodejs.org/api/events.html) that 
 * `compile`: a file has finished compling. Callback receives the full file path.
 * `build`: the full set of files have finished the initial build. Callback receives an array of all file paths
 * `update`: a file has been updated but not yet compiled
-* `minify`: a file has finished being minified
-* `gzip`: a file has finished being gzipped
+* `compress`: a file has finished being minified and gzipped
+* `error`: an error has been caught, most likely a browserify parse error
 
 
 ## Sample development watcher
@@ -52,24 +52,26 @@ The return value is an [event emitter](https://nodejs.org/api/events.html) that 
 ```js
 const bcrawl = require('browserify-crawl')
 
-const logTime = x => console.log(`[${new Date().toLocaleTimeString()}]`, x)
-
 const emitter = bcrawl({
-  fileName: 'page.js',
-  source: './client/js',
+  source: process.argv[2] || './client/js',
   dest: './public/client/js',
-  watch: true,
   compress: false,
+  watch: true,
+  fileName: 'page.js',
   browserify: {
-    paths: ['client'],
-    transform: 'es2040',
+    debug: true,
+    paths: ['./client'],
     insertGlobals: true // minor speed-up
   }
 })
 
+const logTime = x => console.log(`[${new Date().toLocaleTimeString()}]`, x)
+const time = new Date()
 logTime('( ﾟヮﾟ) compiling all files')
-emitter.on('build', (files) => logTime('(° ͜ʖ °) finished building ' + files.length + ' files... now watching for changes'))
+emitter.on('build', (files)  => logTime('(° ͜ʖ °) finished building ' + files + ' files in ' + (new Date() - time) / 1000 + ' seconds... now watching for changes'))
 emitter.on('compile', (file) => logTime('compiled ' + file))
+emitter.on('update', (file)  => logTime('updated  ' + file))
+emitter.on('error', (err)  => logTime('error  ' + err.message))
 ```
 
 ## Sample production builder
@@ -77,21 +79,22 @@ emitter.on('compile', (file) => logTime('compiled ' + file))
 ```js
 const bcrawl = require('browserify-crawl')
 
-const logTime = x => console.log(`[${new Date().toLocaleTimeString()}]`, x)
-
 const emitter = bcrawl({
-  fileName: 'page.js',
-  source: './client/js',
+  source: process.argv[2] || './client/js',
   dest: './public/client/js',
-  watch: false,
   compress: true,
+  watch: false,
+  fileName: 'page.js',
   browserify: {
     transform: 'es2040',
-    paths: ['client']
+    paths: ['./client']
   }
 })
 
+const logTime = x => console.log(`[${new Date().toLocaleTimeString()}]`, x)
+const time = new Date()
 logTime('( ﾟヮﾟ) compiling all files')
-emitter.on('build', (files) => logTime('(° ͜ʖ °) finished building ' + files.length + ' files'))
+emitter.on('build', (files)  => logTime('(° ͜ʖ °) finished building ' + files + ' files in ' + (new Date() - time) / 1000 + ' seconds!'))
 emitter.on('compile', (file) => logTime('compiled ' + file))
+emitter.on('error', (err)  => logTime('error  ' + err.message))
 ```
