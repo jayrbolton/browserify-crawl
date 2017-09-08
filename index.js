@@ -1,136 +1,120 @@
-const fs = require('fs-extra') // (includes graceful-fs)
-const browserify = require('browserify')
-const path = require('path')
-const glob = require('glob')
-const watchify = require('watchify')
-const errorify = require('errorify')
 const exorcist = require('exorcist')
 const zlib = require('zlib')
-const UglifyJS = require('uglify-js')
-const waterfall = require('run-waterfall')
-const parallel = require('run-parallel')
+const fs = require('fs-extra')
+const browserify = require('browserify')
+const watchify = require('watchify')
+// const errorify = require('errorify')
+const Uglify = require('uglify-js')
+const glob = require('glob')
+const path = require('path')
 const EventEmitter = require('events')
-const jobQueue = require('queue')
 
 module.exports = function init (opts) {
-  opts = configDefaults(opts)
-  const pattern = opts.source + '/**/' + opts.fileName
-  const queue = jobQueue({concurrency: opts.concurrency || 1, autostart: true})
-  queue.start(err => { if (err) throw err })
-  queue.on('error', (err) => {
-    opts.emitter.emit('error', err)
-  })
-  glob(pattern, {}, function (err, files) {
-    if (err) throw err
-    files.forEach(f => compile(f, opts, queue))
-    let compileCount = 0
-    queue.on('success', (result) => {
-      compileCount += 1
-      opts.emitter.emit('compile', result)
-      if (compileCount === files.length) {
-        opts.emitter.emit('build', files)
-      }
-    })
-  })
-  return opts.emitter
-}
-
-// Set various defaults into the user-supplied configuration object
-function configDefaults (opts) {
   ['fileName', 'source', 'dest'].forEach(prop => {
     if (!opts.hasOwnProperty(prop)) {
       throw new TypeError('You must provide a ' + prop + ' property in options')
     }
   })
-  opts.emitter = new EventEmitter()
   opts.source = path.resolve(opts.source)
   opts.dest = path.resolve(opts.dest)
-  opts.browserify = Object.assign({
-    debug: true,
-    plugin: []
-  }, opts.browserify || {})
-  opts.browserify.plugin.push(errorify)
-  return opts
-}
-
-// Instantiate a new browserify config object
-// .cache and .packageCache must be a new object for every browserify instance
-function browserifyDefaults (bopts) {
-  return Object.assign({
-    cache: {},
-    packageCache: {}
-  }, bopts)
-}
-
-function compile (inputPath, opts, queue) {
-  const outputPath = path.join(opts.dest, path.relative(opts.source, inputPath))
-  const b = browserify(inputPath, browserifyDefaults(opts.browserify))
-  if (opts.watch) b.plugin(watchify)
-  fs.ensureDir(path.dirname(outputPath), function (err) {
-    if (err) throw err
-    queue.push((cb) => build(b, opts, outputPath, cb))
-  })
-  if (opts.watch) {
-    b.on('update', (cb) => {
-      queue.push((cb) => build(b, opts, outputPath, cb))
-      opts.emitter.emit('update', inputPath)
+  opts.emitter = new EventEmitter()
+  glob(opts.source + '/**/' + opts.fileName, {}, (err, files) => {
+    if (err) opts.emitter.emit('error', err)
+    opts.compiledCount = 0
+    opts.total = files.length
+    files.forEach(inputPath => {
+      opts.emitter.emit('found', inputPath)
+      const outputPath = path.join(opts.dest, path.relative(opts.source, inputPath))
+      compile(inputPath, outputPath, opts)
     })
-  }
-  return b
+  })
+  return opts.emitter
 }
 
-function build (b, opts, output, callback) {
-  const write = fs.createWriteStream(output, 'utf8')
-  const smap = exorcist(output + '.map')
-  waterfall([
-    // Bundle and initial source-map
-    (cb) => {
-      b.bundle().pipe(smap).pipe(write)
-      write.on('finish', cb)
-    },
-    // UglifyJS
-    (cb) => {
-      if (!opts.compress) return callback(null, output)
-      parallel([
-        cb => fs.readFile(output, 'utf8', cb),
-        cb => fs.readFile(output + '.map', 'utf8', cb)
-      ], (err, results) => cb(err, results[0], results[1]))
-    },
-    (code, map, cb) => {
-      uglify(opts, output, code, map, cb)
-    },
-    // Gzip it
-    (cb) => {
-      gzip(opts, output, cb)
-    }
-  ], (err) => callback(err, output))
-}
+function compile (inputPath, outputPath, opts) {
+  const browserifyOpts = Object.assign({
+    cache: {},
+    packageCache: {},
+    plugin: [],
+    debug: true,
+    entries: [inputPath]
+  }, opts.browserify || {})
+  if (opts.watch) browserifyOpts.plugin.push(watchify)
+  // browserifyOpts.plugin.push(errorify)
 
-function gzip (opts, output, callback) {
-  const write = fs.createWriteStream(output + '.gz')
-  fs.createReadStream(output)
-    .pipe(zlib.createGzip())
-    .pipe(write)
-  write.on('finish', (err) => {
-    opts.emitter.emit('gzip', output)
-    callback(err)
+  fs.ensureDirSync(path.dirname(outputPath))
+  const b = browserify(browserifyOpts)
+  bundle(outputPath, opts, b)
+  b.on('update', () => {
+    opts.emitter.emit('update', inputPath)
+    bundle(outputPath, opts, b)
   })
 }
 
-function uglify (opts, output, code, map, callback) {
-  const base = path.basename(output)
-  const result = UglifyJS.minify(code, {
+function bundle (outputPath, opts, b) {
+  const write = fs.createWriteStream(outputPath)
+  b.bundle()
+    .on('error', function (err) {
+      opts.emitter.emit('error', err)
+      this.emit('end')
+    })
+    .pipe(exorcist(outputPath + '.map'))
+    .pipe(write)
+
+  write.on('finish', (err, x, y) => {
+    if (err) opts.emitter.emit('error', err)
+    opts.emitter.emit('compile', outputPath)
+    if (opts.compress) {
+      compress(outputPath, opts)
+    } else {
+      checkCount(opts)
+    }
+  })
+}
+
+function checkCount (opts) {
+  opts.compiledCount += 1
+  if (opts.compiledCount === opts.total) {
+    opts.emitter.emit('build', opts.total)
+  }
+}
+
+function compress (outputPath, opts) {
+  const code = fs.readFileSync(outputPath, 'utf8')
+  const map = fs.readFileSync(outputPath + '.map', 'utf8')
+  uglify(outputPath, code, map, opts, () => {
+    gzip(outputPath, opts, () => {
+      opts.emitter.emit('compress', outputPath)
+      checkCount(opts)
+    })
+  })
+}
+
+function uglify (outputPath, code, map, opts, callback) {
+  const base = path.basename(outputPath)
+  const result = Uglify.minify(code, {
     sourceMap: {
       content: map,
       filename: base,
       url: base + '.map'
     }
   })
-  parallel([
-    cb => fs.writeFile(output + '.map', result.map, cb),
-    cb => fs.writeFile(output, result.code, cb)
-  ], err => {
-    opts.emitter.emit('minify', output)
-    callback(err)
+  fs.writeFile(outputPath, result.code, err => {
+    if (err) throw err
+    fs.writeFile(outputPath + '.map', result.map, err => {
+      if (err) opts.emitter.emit('error', err)
+      callback()
+    })
+  })
+}
+
+function gzip (outputPath, opts, callback) {
+  const write = fs.createWriteStream(outputPath + '.gz')
+  fs.createReadStream(outputPath)
+    .pipe(zlib.createGzip())
+    .pipe(write)
+  write.on('finish', (err) => {
+    if (err) opts.emitter.emit('error', err)
+    callback()
   })
 }

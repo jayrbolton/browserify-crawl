@@ -30,26 +30,22 @@ tape('it compiles mainfiles', (t) => {
         compress: true
       })
       emitter.on('compile', (file) => console.log('compiled', file))
-      emitter.on('gzip', (file) => console.log('gzipped', file))
-      emitter.on('minify', (file) => console.log('minified', file))
+      emitter.on('compress', (file) => console.log('compressed', file))
       emitter.on('build', (files) => {
-        console.log('built', files.length, 'files')
+        console.log('built', files, 'files')
         cb(null)
       })
     },
     (cb) => fs.readFile('./test/output/main.js', 'utf8', cb),
     (contents, cb) => {
+      console.log('contents', contents)
       t.assert(contents.match('112358'), 'compiles plain js file')
+      t.assert(contents.match('123321'), 'includes requires')
       cb(null)
     },
     (cb) => fs.readFile('./test/output/nested/main.js', 'utf8', cb),
     (contents, cb) => {
       t.assert(contents.match('420420'), 'compiles nested plain js file')
-      cb(null)
-    },
-    (cb) => fs.readFile('./test/output/main.js', 'utf8', cb),
-    (contents, cb) => {
-      t.assert(contents.match('123321'), 'includes requires')
       cb(null)
     },
     (cb) => {

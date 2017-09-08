@@ -1,6 +1,6 @@
 {
   "name": "browserify-crawl",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "Recursively crawl and scan directories, compiling multiple js files into an output directory",
   "main": "index.js",
   "directories": {
@@ -23,13 +23,9 @@
   "homepage": "https://github.com/jayrbolton/browserify-crawl#readme",
   "dependencies": {
     "browserify": "14.4.0",
-    "errorify": "0.3.1",
     "exorcist": "0.4.0",
     "fs-extra": "4.0.1",
     "glob": "7.1.2",
-    "queue": "4.4.0",
-    "run-parallel": "1.1.6",
-    "run-waterfall": "1.1.3",
     "uglify-js": "3.0.28",
     "watchify": "3.9.0",
     "zlib": "1.0.5"
@@ -37,6 +33,8 @@
   "devDependencies": {
     "babel-preset-es2015": "6.24.1",
     "babelify": "7.3.0",
+    "run-parallel": "1.1.6",
+    "run-waterfall": "1.1.3",
     "standard": "10.0.3",
     "tap-spec": "4.1.1",
     "tape": "4.8.0"
