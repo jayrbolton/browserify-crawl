@@ -3,7 +3,6 @@ const zlib = require('zlib')
 const fs = require('fs-extra')
 const browserify = require('browserify')
 const watchify = require('watchify')
-// const errorify = require('errorify')
 const Uglify = require('uglify-js')
 const glob = require('glob')
 const path = require('path')
@@ -40,10 +39,11 @@ function compile (inputPath, outputPath, opts) {
     entries: [inputPath]
   }, opts.browserify || {})
   if (opts.watch) browserifyOpts.plugin.push(watchify)
-  // browserifyOpts.plugin.push(errorify)
-
   fs.ensureDirSync(path.dirname(outputPath))
   const b = browserify(browserifyOpts)
+  if (opts.globalTransform) {
+    opts.globalTransform.forEach(t => b.transform(t, {global: true}))
+  }
   bundle(outputPath, opts, b)
   b.on('update', () => {
     opts.emitter.emit('update', inputPath)
