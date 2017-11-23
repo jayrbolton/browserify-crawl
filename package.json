@@ -23,10 +23,13 @@
   "homepage": "https://github.com/jayrbolton/browserify-crawl#readme",
   "dependencies": {
     "browserify": "14.4.0",
+    "common-shakeify": "^0.4.5",
     "exorcist": "0.4.0",
     "fs-extra": "4.0.1",
     "glob": "7.1.2",
     "uglify-js": "3.0.28",
+    "uglifyify": "^4.0.5",
+    "unassertify": "^2.1.0",
     "watchify": "3.9.0",
     "zlib": "1.0.5"
   },

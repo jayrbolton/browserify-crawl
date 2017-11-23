@@ -8,6 +8,7 @@ const Uglify = require('uglify-js')
 const glob = require('glob')
 const path = require('path')
 const EventEmitter = require('events')
+const commonShake = require('common-shakeify')
 
 module.exports = function init (opts) {
   ['fileName', 'source', 'dest'].forEach(prop => {
@@ -44,6 +45,9 @@ function compile (inputPath, outputPath, opts) {
 
   fs.ensureDirSync(path.dirname(outputPath))
   const b = browserify(browserifyOpts)
+  b.plugin(commonShake, {})
+  b.transform('unassertify')
+  b.transform('uglifyify', {global: true})
   bundle(outputPath, opts, b)
   b.on('update', () => {
     opts.emitter.emit('update', inputPath)
