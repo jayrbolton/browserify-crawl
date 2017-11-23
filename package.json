@@ -1,6 +1,6 @@
 {
   "name": "browserify-crawl",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "description": "Recursively crawl and scan directories, compiling multiple js files into an output directory",
   "main": "index.js",
   "directories": {

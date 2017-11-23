@@ -27,7 +27,10 @@ tape('it compiles mainfiles', (t) => {
         fileName: 'main.js',
         source: './test/input',
         dest: './test/output',
-        compress: true
+        compress: true,
+        uglifyify: true,
+        commonShakeify: true,
+        unassertify: true
       })
       emitter.on('compile', (file) => console.log('compiled', file))
       emitter.on('compress', (file) => console.log('compressed', file))

@@ -54,10 +54,16 @@ function compile (inputPath, outputPath, opts) {
 
 function bundle (outputPath, opts, b) {
   const write = fs.createWriteStream(outputPath)
-  b.plugin(commonShake, {})
-    .transform('unassertify')
-    .transform('uglifyify', {global: true})
-    .bundle()
+  if (opts.unassertify) {
+    b.transform('unassertify')
+  }
+  if (opts.uglifyify) {
+    b.transform('uglifyify', {global: true})
+  }
+  if (opts.commonShakeify) {
+    b.plugin(commonShake, {})
+  }
+  b.bundle()
     .on('error', function (err) {
       opts.emitter.emit('error', err)
       this.emit('end')

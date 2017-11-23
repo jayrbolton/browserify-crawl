@@ -37,6 +37,9 @@ The `options` object can have these properties:
 * `browserify`: an object of browserify options from the [browserify api](https://github.com/substack/node-browserify)
 * `watch`: whether to run watchify on each file to recompile on any changes
 * `compress`: whether to uglify & gzip the compiled file (slower)
+* `unassertify`: whether to run `unassertify` (slower)
+* `commonShakeify`: whether to run `common-shakeify` (slower)
+* `uglifyify`: whether to run `uglifyify` (slower)
 
 The return value is an [event emitter](https://nodejs.org/api/events.html) that allows you to listen to the following events:
 
