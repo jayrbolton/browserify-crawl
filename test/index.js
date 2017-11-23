@@ -15,14 +15,14 @@ tape('it compiles mainfiles', (t) => {
     module.exports = 420420
   `
   waterfall([
-    (cb)    => fs.remove('./test/input', cb),
-    (cb)    => fs.remove('./test/output', cb),
-    (cb)    => fs.ensureDir('./test/input', cb),
+    (cb) => fs.remove('./test/input', cb),
+    (cb) => fs.remove('./test/output', cb),
+    (cb) => fs.ensureDir('./test/input', cb),
     (_, cb) => fs.ensureDir('./test/input/nested', cb),
     (_, cb) => fs.writeFile('./test/input/main.js', main, cb),
-    (cb)    => fs.writeFile('./test/input/x.js', x, cb),
-    (cb)    => fs.writeFile('./test/input/nested/main.js', nested, cb),
-    (cb)    => {
+    (cb) => fs.writeFile('./test/input/x.js', x, cb),
+    (cb) => fs.writeFile('./test/input/nested/main.js', nested, cb),
+    (cb) => {
       const emitter = bcrawl({
         fileName: 'main.js',
         source: './test/input',
@@ -61,4 +61,3 @@ tape('it compiles mainfiles', (t) => {
     t.end()
   })
 })
-

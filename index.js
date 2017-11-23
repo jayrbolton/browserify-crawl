@@ -7,6 +7,7 @@ const Uglify = require('uglify-js')
 const glob = require('glob')
 const path = require('path')
 const EventEmitter = require('events')
+const commonShake = require('common-shakeify')
 
 module.exports = function init (opts) {
   ['fileName', 'source', 'dest'].forEach(prop => {
@@ -53,7 +54,10 @@ function compile (inputPath, outputPath, opts) {
 
 function bundle (outputPath, opts, b) {
   const write = fs.createWriteStream(outputPath)
-  b.bundle()
+  b.plugin(commonShake, {})
+    .transform('unassertify')
+    .transform('uglifyify', {global: true})
+    .bundle()
     .on('error', function (err) {
       opts.emitter.emit('error', err)
       this.emit('end')
