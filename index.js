@@ -45,9 +45,6 @@ function compile (inputPath, outputPath, opts) {
 
   fs.ensureDirSync(path.dirname(outputPath))
   const b = browserify(browserifyOpts)
-  b.plugin(commonShake, {})
-  b.transform('unassertify')
-  b.transform('uglifyify', {global: true})
   bundle(outputPath, opts, b)
   b.on('update', () => {
     opts.emitter.emit('update', inputPath)
@@ -57,7 +54,10 @@ function compile (inputPath, outputPath, opts) {
 
 function bundle (outputPath, opts, b) {
   const write = fs.createWriteStream(outputPath)
-  b.bundle()
+  b.plugin(commonShake, {})
+    .transform('unassertify')
+    .transform('uglifyify', {global: true})
+    .bundle()
     .on('error', function (err) {
       opts.emitter.emit('error', err)
       this.emit('end')
