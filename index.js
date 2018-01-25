@@ -109,8 +109,11 @@ function uglify (outputPath, code, map, opts, callback) {
       url: base + '.map'
     }
   })
+  if (result.error) {
+    opts.emitter.emit('error', result.error)
+  }
   fs.writeFile(outputPath, result.code, err => {
-    if (err) throw err
+    if (err) opts.emitter.emit('error', err)
     fs.writeFile(outputPath + '.map', result.map, err => {
       if (err) opts.emitter.emit('error', err)
       callback()
@@ -123,6 +126,9 @@ function gzip (outputPath, opts, callback) {
   fs.createReadStream(outputPath)
     .pipe(zlib.createGzip())
     .pipe(write)
+  write.on('error', (err) => {
+    if (err) opts.emitter.emit('error', err)
+  })
   write.on('finish', (err) => {
     if (err) opts.emitter.emit('error', err)
     callback()
